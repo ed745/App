@@ -39,7 +39,6 @@ const App: React.FC = () => {
     return cat.amount;
   };
 
-  // Fuentes de ingreso principales (para el selector)
   const incomeSources = useMemo(() => 
     categories.filter(c => c.type === 'income' && c.parentId === null),
   [categories]);
@@ -51,7 +50,6 @@ const App: React.FC = () => {
     return { income, expenses, balance: income - expenses };
   }, [categories]);
 
-  // Calcular cuánto se ha descontado de cada fuente de ingreso
   const getIncomeUsage = (incomeId: string) => {
     const linkedExpenses = categories.filter(c => c.type === 'expense' && c.sourceIncomeId === incomeId);
     return linkedExpenses.reduce((sum, exp) => sum + getEffectiveAmount(exp), 0);
@@ -82,13 +80,15 @@ const App: React.FC = () => {
     setIsAdding(null);
   };
 
-  const updateAmount = (id: string, val: number) => {
-    setCategories(categories.map(c => c.id === id ? { ...c, amount: val } : c));
+  const updateCategoryField = (id: string, field: keyof FinanceCategory, val: any) => {
+    setCategories(categories.map(c => c.id === id ? { ...c, [field]: val } : c));
   };
 
-  const deleteCategory = (id: string) => {
-    if (confirm('¿Eliminar esta categoría y sus subcategorías?')) {
-      const idsToDelete = new Set([id]);
+  const deleteCategory = (cat: FinanceCategory) => {
+    // Mensaje de confirmación personalizado según la solicitud del usuario
+    const typeText = cat.type === 'income' ? 'ingreso' : 'gastos';
+    if (confirm(`¿Desea eliminar categoría de ${typeText}?`)) {
+      const idsToDelete = new Set([cat.id]);
       const findChildren = (pid: string) => {
         categories.forEach(c => {
           if (c.parentId === pid) {
@@ -97,7 +97,7 @@ const App: React.FC = () => {
           }
         });
       };
-      findChildren(id);
+      findChildren(cat.id);
       setCategories(categories.filter(c => !idsToDelete.has(c.id)));
     }
   };
@@ -114,34 +114,46 @@ const App: React.FC = () => {
     const isOver = cat.type === 'expense' && cat.budget > 0 && amount > cat.budget;
     const hasChildren = children.length > 0;
     
-    // Para ingresos, mostrar cuánto queda disponible después de gastos vinculados
     const usedFromIncome = cat.type === 'income' ? getIncomeUsage(cat.id) : 0;
     const incomeBalance = cat.type === 'income' ? amount - usedFromIncome : 0;
 
     return (
       <div key={cat.id} className="flex flex-col gap-2">
         <div 
-          className={`bg-white rounded-2xl p-4 border transition-all group ${depth > 0 ? 'ml-6 border-l-4' : 'border-[#cfe7d9] shadow-sm'}`}
+          className={`bg-white rounded-2xl p-4 border transition-all ${depth > 0 ? 'ml-6 border-l-4' : 'border-[#cfe7d9] shadow-sm hover:border-[#13ec6a]'}`}
           style={{ borderLeftColor: depth > 0 ? cat.color : undefined }}
         >
           <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-3 overflow-hidden">
+            <div className="flex items-center gap-3 overflow-hidden flex-1">
               <div 
                 className="w-9 h-9 flex items-center justify-center rounded-xl flex-shrink-0"
                 style={{ backgroundColor: `${cat.color}20`, color: cat.color }}
               >
                 <span className="material-symbols-outlined text-xl">{cat.icon}</span>
               </div>
-              <div className="truncate">
-                <span className="font-bold text-[#0d1b13] block truncate text-sm">{cat.name}</span>
+              <div className="flex-1 min-w-0">
+                <input 
+                  type="text"
+                  value={cat.name}
+                  onChange={(e) => updateCategoryField(cat.id, 'name', e.target.value)}
+                  className="font-bold text-[#0d1b13] block w-full border-none p-0 bg-transparent text-sm focus:ring-0 focus:bg-gray-50 rounded"
+                />
                 <div className="flex flex-col">
-                    <span className="text-[10px] font-bold text-gray-400 uppercase">
-                      {cat.parentId ? 'Subcategoría' : 'Principal'} • {cat.type === 'income' ? 'Esperado' : 'Meta'}: {formatValue(cat.budget)}
-                    </span>
+                    <div className="flex items-center gap-1">
+                        <span className="text-[9px] font-bold text-gray-400 uppercase whitespace-nowrap">
+                          {cat.type === 'income' ? 'ESPERADO' : 'META'}:
+                        </span>
+                        <input 
+                          type="number"
+                          value={cat.budget || ''}
+                          onChange={(e) => updateCategoryField(cat.id, 'budget', Number(e.target.value))}
+                          className="text-[10px] font-bold text-[#13ec6a] border-none p-0 bg-transparent w-16 focus:ring-0"
+                        />
+                    </div>
                     {cat.type === 'expense' && cat.sourceIncomeId && (
                         <span className="text-[9px] font-black text-[#13ec6a] uppercase flex items-center gap-1 mt-0.5">
                             <span className="material-symbols-outlined text-[10px]">link</span>
-                            Desde: {categories.find(c => c.id === cat.sourceIncomeId)?.name || 'Desconocido'}
+                            Origen: {categories.find(c => c.id === cat.sourceIncomeId)?.name || 'N/A'}
                         </span>
                     )}
                 </div>
@@ -149,7 +161,7 @@ const App: React.FC = () => {
             </div>
             
             <div className="flex items-center gap-2">
-              <div className="text-right">
+              <div className="text-right flex flex-col items-end">
                 {hasChildren ? (
                   <span className="block font-black text-[#0d1b13] text-sm pr-2">{formatValue(amount)}</span>
                 ) : (
@@ -157,7 +169,7 @@ const App: React.FC = () => {
                     type="number"
                     value={cat.amount || ''}
                     placeholder="0.00"
-                    onChange={(e) => updateAmount(cat.id, Number(e.target.value))}
+                    onChange={(e) => updateCategoryField(cat.id, 'amount', Number(e.target.value))}
                     className="block w-20 text-right border-none bg-gray-50 rounded-lg p-1 text-sm font-black text-[#0d1b13] focus:ring-1 focus:ring-[#13ec6a]"
                   />
                 )}
@@ -165,18 +177,25 @@ const App: React.FC = () => {
                   {cat.type === 'income' ? `LIBRE: ${formatValue(incomeBalance)}` : (isOver ? 'EXCEDIDO' : 'ACTUAL')}
                 </span>
               </div>
-              <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onClick={() => setIsAdding({ parentId: cat.id, type: cat.type })} className="text-gray-400 hover:text-[#13ec6a]">
+              <div className="flex flex-col gap-1 pl-2 border-l border-gray-100">
+                <button 
+                  onClick={() => setIsAdding({ parentId: cat.id, type: cat.type })} 
+                  className="text-gray-300 hover:text-[#13ec6a] transition-colors"
+                  title="Añadir Subcategoría"
+                >
                   <span className="material-symbols-outlined text-lg">add_box</span>
                 </button>
-                <button onClick={() => deleteCategory(cat.id)} className="text-gray-400 hover:text-red-500">
+                <button 
+                  onClick={() => deleteCategory(cat)} 
+                  className="text-gray-300 hover:text-red-500 transition-colors"
+                  title="Eliminar Categoría"
+                >
                   <span className="material-symbols-outlined text-lg">delete</span>
                 </button>
               </div>
             </div>
           </div>
           
-          {/* Barra de progreso visual */}
           <div className="h-1 w-full bg-gray-100 rounded-full overflow-hidden mt-1">
             <div 
                 className={`h-full transition-all duration-700 ${cat.type === 'income' ? 'bg-[#13ec6a]' : (isOver ? 'bg-red-500' : 'bg-[#0d1b13]')}`}
@@ -187,11 +206,6 @@ const App: React.FC = () => {
                 }}
             ></div>
           </div>
-          {cat.type === 'income' && usedFromIncome > 0 && (
-            <p className="text-[8px] font-black text-gray-400 mt-1 uppercase text-right">
-              {formatValue(usedFromIncome)} comprometido en gastos
-            </p>
-          )}
         </div>
         {children.map(child => renderCategoryRow(child, depth + 1))}
       </div>
@@ -202,10 +216,9 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-[#f6f8f7] pb-20">
       <div className="max-w-md mx-auto bg-[#f6f8f7] shadow-xl min-h-screen flex flex-col">
         
-        {/* Header */}
         <header className="px-6 pt-10 pb-4 flex items-center justify-between sticky top-0 bg-[#f6f8f7]/90 backdrop-blur-md z-20">
           <div className="flex items-center gap-2">
-            <div className="bg-[#0d1b13] p-1.5 rounded-lg">
+            <div className="bg-[#0d1b13] p-1.5 rounded-lg shadow-sm">
                 <span className="material-symbols-outlined text-white text-xl">account_balance</span>
             </div>
             <h1 className="text-xl font-black text-[#0d1b13] tracking-tight italic">FinanceFlow Pro</h1>
@@ -221,7 +234,6 @@ const App: React.FC = () => {
 
         <main className="px-5 flex flex-col gap-6 mt-4">
           
-          {/* Consolidated Summary */}
           <div className="bg-[#0d1b13] rounded-[2rem] p-6 text-white shadow-2xl relative overflow-hidden">
              <div className="absolute right-0 top-0 w-32 h-32 bg-[#13ec6a] rounded-full blur-[80px] opacity-20"></div>
              <p className="text-gray-400 text-xs font-bold uppercase tracking-widest mb-1">Balance Consolidado</p>
@@ -247,7 +259,6 @@ const App: React.FC = () => {
              </div>
           </div>
 
-          {/* Chart Section */}
           <div className="bg-white rounded-3xl p-6 border border-[#cfe7d9] shadow-sm">
             <div className="flex justify-between items-center mb-6">
               <div className="flex bg-gray-100 p-1 rounded-xl">
@@ -277,7 +288,7 @@ const App: React.FC = () => {
                         <div className="w-2 h-2 rounded-full" style={{backgroundColor: item.color}}></div>
                         <span className="text-gray-500 truncate">{item.name}</span>
                       </div>
-                      <span className="text-[#0d1b13]">{Math.round((item.value / (activeTab === 'income' ? totals.income : totals.expenses || 1)) * 100)}%</span>
+                      <span className="text-[#0d1b13]">{Math.round((item.value / (activeTab === 'income' ? (totals.income || 1) : (totals.expenses || 1))) * 100)}%</span>
                    </div>
                  ))}
                  {chartData.length > 3 && <span className="text-[9px] text-gray-300 italic font-bold">Y {chartData.length - 3} más...</span>}
@@ -285,7 +296,6 @@ const App: React.FC = () => {
             </div>
           </div>
 
-          {/* Categories List */}
           <section className="flex flex-col gap-4">
             <div className="flex justify-between items-center px-1">
               <h3 className="text-lg font-black text-[#0d1b13]">
@@ -300,11 +310,10 @@ const App: React.FC = () => {
               </button>
             </div>
 
-            {/* Modal de adición simplificado */}
             {isAdding && (
               <div className="bg-white border-2 border-[#13ec6a] rounded-2xl p-4 shadow-xl animate-in zoom-in duration-200 flex flex-col gap-3">
                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">
-                   {isAdding.parentId ? `Añadir subcategoría` : `Añadir principal (${activeTab === 'income' ? 'Ingreso' : 'Gasto'})`}
+                   {isAdding.parentId ? `Nueva subcategoría` : `Nueva principal (${activeTab === 'income' ? 'Ingreso' : 'Gasto'})`}
                 </p>
                 
                 <div className="grid grid-cols-2 gap-3">
@@ -317,7 +326,7 @@ const App: React.FC = () => {
                    />
                    <input 
                     type="number"
-                    placeholder={activeTab === 'income' ? "Esperado..." : "Presupuesto..."}
+                    placeholder={activeTab === 'income' ? "Esperado..." : "Meta..."}
                     value={newBudget || ''}
                     onChange={e => setNewBudget(Number(e.target.value))}
                     className="border-[#cfe7d9] rounded-xl text-sm p-2 focus:ring-[#13ec6a] font-bold"
@@ -332,7 +341,7 @@ const App: React.FC = () => {
                             onChange={e => setSelectedSourceId(e.target.value)}
                             className="border-[#cfe7d9] rounded-xl text-xs p-2 focus:ring-[#13ec6a] font-bold bg-gray-50"
                         >
-                            <option value="">Selecciona Ingreso (Opcional)</option>
+                            <option value="">Selecciona Origen (Opcional)</option>
                             {incomeSources.map(source => (
                                 <option key={source.id} value={source.id}>
                                     {source.name} (Saldo: {formatValue(getEffectiveAmount(source) - getIncomeUsage(source.id))})
@@ -343,7 +352,7 @@ const App: React.FC = () => {
                 )}
 
                 <div className="flex gap-2">
-                   <button onClick={handleAddCategory} className="flex-1 bg-[#0d1b13] text-white py-2 rounded-xl text-xs font-bold">Guardar</button>
+                   <button onClick={handleAddCategory} className="flex-1 bg-[#0d1b13] text-white py-2 rounded-xl text-xs font-bold shadow-md">Crear</button>
                    <button onClick={() => setIsAdding(null)} className="px-4 bg-gray-100 text-gray-500 rounded-xl text-xs font-bold">Cerrar</button>
                 </div>
               </div>
